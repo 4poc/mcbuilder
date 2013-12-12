@@ -15,10 +15,10 @@ Options:
 """
 from docopt import docopt
 
-from xmlcomb import XMLCombiner
 
 import pymclevel as mclevel
 import pymclevel.mclevelbase as mclevelbase
+import pymclevel.nbt as nbt
 from pymclevel.box import BoundingBox, Vector
 
 import xml.etree.ElementTree as ET
@@ -31,6 +31,9 @@ import re
 import shutil
 
 import logging
+
+from xmlcomb import XMLCombiner
+from nbtxml import parse_nbt
 
 log = logging.getLogger(__name__)
 formatter = logging.Formatter('[%(filename)s:%(lineno)s] %(levelname)s - %(message)s')
@@ -61,6 +64,7 @@ class Block(object):
         self.sign = sign
         self.block = block
         self.data = sign.data
+        self.nbt = None
 
     @staticmethod
     def from_xml(buildfile, node):
@@ -91,6 +95,15 @@ class Block(object):
                 data = value_format(node.attrib['data'], facing=sign.facing, data=sign.data)
             block.data = int(data)
 
+        for child in node:
+            if child.tag == 'Compound':
+                params = {
+                        'x': sign.x,
+                        'y': sign.y,
+                        'z': sign.z
+                        }
+                block.nbt = parse_nbt(child, params)
+
         return block
 
     def replace(self, level):
@@ -100,8 +113,16 @@ class Block(object):
         log.info('replace block:')
         log.info(str(self))
 
-        level.fillBlocks(BoundingBox((self.sign.x, self.sign.y, self.sign.z), \
-            (1, 1, 1)), self.block)
+        bb = BoundingBox((self.sign.x, self.sign.y, self.sign.z),
+                (1, 1, 1))
+
+        # remove the tile entity of the sign:
+        level.removeTileEntitiesInBox(bb)
+
+        level.fillBlocks(bb, self.block)
+
+        if self.nbt:
+            level.addTileEntity(self.nbt)
 
     def __str__(self):
         return "Block(%s, %s)" % (str(self.sign), str(self.block))
