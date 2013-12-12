@@ -33,36 +33,36 @@ Example
 * usable as multipliers for numerical values
 * simple include feature to seperate buildfile in multiple xml files
 * include external xml files
-  ```xml
-  <mcbuilder>
-    <include src="mixins.xml" /> 
-    ...
-  </mcbuilder>
-  ```
+```xml
+<mcbuilder>
+  <include src="mixins.xml" /> 
+  ...
+</mcbuilder>
+```
 * mixins with parameters
-  ```xml
-  <mcbuilder>
-    <mixin name="TileEntity">
-      <Compound>
-        <String name="id">%(param[id])</String>
-        <Int name="x">%(x)</Int>
-        <Int name="y">%(y)</Int>
-        <Int name="z">%(z)</Int>
-      </Compound>
-    </mixin>
-    <signs>...</signs>
-    <blocks>
-      <block id="1" blockName="Sign">
-        <TileEntity id="Sign">
-          <String name="Text1">Test.</String>
-          <String name="Text2"></String>
-          <String name="Text3"></String>
-          <String name="Text4"></String>
-        </TileEntity>
-      </block>
-    </blocks>
-  </mcbuilder>
-  ```
+```xml
+<mcbuilder>
+  <mixin name="TileEntity">
+    <Compound>
+      <String name="id">%(param[id])</String>
+      <Int name="x">%(x)</Int>
+      <Int name="y">%(y)</Int>
+      <Int name="z">%(z)</Int>
+    </Compound>
+  </mixin>
+  <signs>...</signs>
+  <blocks>
+    <block id="1" blockName="Sign">
+      <TileEntity id="Sign">
+        <String name="Text1">Test.</String>
+        <String name="Text2"></String>
+        <String name="Text3"></String>
+        <String name="Text4"></String>
+      </TileEntity>
+    </block>
+  </blocks>
+</mcbuilder>
+```
 
 
 
