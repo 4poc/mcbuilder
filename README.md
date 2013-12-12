@@ -33,13 +33,16 @@ Example
 * usable as multipliers for numerical values
 * simple include feature to seperate buildfile in multiple xml files
 * include external xml files
+
 ```xml
 <mcbuilder>
   <include src="mixins.xml" /> 
   ...
 </mcbuilder>
 ```
+
 * mixins with parameters
+
 ```xml
 <mcbuilder>
   <mixin name="TileEntity">
