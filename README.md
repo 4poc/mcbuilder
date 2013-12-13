@@ -7,7 +7,7 @@ with blocks like tnt, spawners, chests, etc. based on an xml buildscript.
 This is work in progress and not really yet usable.
 
 Example
-=======
+-------
 
 ![mcbuilder example](http://apoc.cc/mc/mcbuilder.png "mcbuilder example")
 
@@ -65,12 +65,12 @@ Example
 </mcbuilder>
 ```
 
-(Planned) Features:
-===================
+(Planned) Features/Todo List:
+-----------------------------
 
-* replace with spawners, chests, blocks, etc.
+* ~~replace with spawners, chests, blocks, etc.~~
 * replace with entities like villagers etc.
-* support for tileentity nbt data
+* ~~support for tileentity nbt data~~
 * "point" signs to reference sign locations in command blocks, etc.
 * constants to replace in strings
 * usable as multipliers for numerical values
