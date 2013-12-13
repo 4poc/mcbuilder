@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 """Minecraft world build system.
 
 Usage:
@@ -22,7 +23,6 @@ import pymclevel.nbt as nbt
 from pymclevel.box import BoundingBox, Vector
 
 import xml.etree.ElementTree as ET
-import xml.dom.minidom as minidom
 
 import sys
 import os
@@ -32,8 +32,9 @@ import shutil
 
 import logging
 
-from xmlcomb import XMLCombiner
 from nbtxml import parse_nbt
+
+from xmlhelper import XMLReader, XMLWriter
 
 log = logging.getLogger(__name__)
 formatter = logging.Formatter('[%(filename)s:%(lineno)s] %(levelname)s - %(message)s')
@@ -60,11 +61,11 @@ def value_format(fmt, **kwargs):
     return fmt
 
 class Block(object):
-    def __init__(self, sign, block):
+    def __init__(self, sign, block, **kwargs):
         self.sign = sign
         self.block = block
-        self.data = sign.data
-        self.nbt = None
+        self.data = kwargs.get('data', sign.data)
+        self.nbt = kwargs.get('nbt')
 
     @staticmethod
     def from_xml(buildfile, node):
@@ -82,19 +83,18 @@ class Block(object):
             if len(blocks) > 0: block = blocks[0]
 
         if not block:
-            log.warn('unable to find block for element '+str(node))
+            log.error('unable to find block for element '+str(node))
             return None
 
-        block = Block(sign, block)
-
         # block data value
+        data = None
         if 'data' in node.attrib:
             if re.match('^\d+$', node.attrib['data']):
                 data = node.attrib['data']
             else:
                 data = value_format(node.attrib['data'], facing=sign.facing, data=sign.data)
-            block.data = int(data)
 
+        nbt = None
         for child in node:
             if child.tag == 'Compound':
                 params = {
@@ -102,9 +102,9 @@ class Block(object):
                         'y': sign.y,
                         'z': sign.z
                         }
-                block.nbt = parse_nbt(child, params)
+                nbt = parse_nbt(child, params)
 
-        return block
+        return Block(sign, block, data=data, nbt=nbt)
 
     def replace(self, level):
         # try to just copy the data value: TODO: foo
@@ -212,7 +212,7 @@ class Buildfile(object):
         log.info('loading minecraft world, path: %s' % world_path)
         self.level = mclevel.fromFile(world_path)
         log.info('world loaded, title: %s' % self.level.displayName)
-        self.post_title = '0.1'
+        self.post_title = None
         self.force_sign = False # replace non-existing signs just by xml definition
 
         self.signs = []
@@ -246,14 +246,7 @@ class Buildfile(object):
 
     def load_xml(self):
         """Loads the xml buildfile."""
-        if not self.existing_xml(): return
-
-        tree = ET.parse(self.path)
-        root = tree.getroot()
-
-        for inc in root.findall('./include'):
-            print inc
-            # TODO: ...
+        root = XMLReader(self.path).root
 
         for sign in root.findall('./signs/sign'):
             self.load_sign_xml(sign)
@@ -297,9 +290,8 @@ class Buildfile(object):
         signs = ET.SubElement(root, "signs")
         for sign in self.signs:
             sign.create_xml(signs)
-        # ... replacements
-        reparsed = minidom.parseString(ET.tostring(root, 'utf-8'))
-        return reparsed.toprettyxml(indent="    ")
+
+        return XMLWriter(root).to_string()
 
     def write_xml(self):
         with open(self.path, 'w') as f:
@@ -308,6 +300,9 @@ class Buildfile(object):
                 f.write(xml)
 
     def block_replace(self):
+        #if self.post_title:
+        #    self.level.displayName += ' ' + self.post_title
+
         for block in self.blocks:
             block.replace(self.level)
 
@@ -337,6 +332,7 @@ if __name__ == '__main__':
         out_world = world
 
     build = Buildfile(args['<buildfile>'], out_world)
+    # TODO: kwargs..
     build.post_title = args['--post']
     build.force_sign = args['--force']
 
