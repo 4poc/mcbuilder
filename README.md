@@ -9,6 +9,8 @@ This is work in progress and not really yet usable.
 Example
 =======
 
+![mcbuilder example](http://apoc.cc/mc/mcbuilder.png "mcbuilder example")
+
 ```xml
 <?xml version="1.0" ?>
 <mcbuilder>
