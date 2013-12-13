@@ -11,6 +11,11 @@ import pymclevel.mclevelbase as mclevelbase
 import pymclevel.nbt as nbt
 from pymclevel.box import BoundingBox, Vector
 
+def replace_params(fmt, params):
+    for key, value in params.iteritems():
+        fmt = re.sub('%%\\(%s\\)' % key, str(value), fmt)
+    return fmt
+
 def parse_nbt(node, params={}):
     """Recursivly build nbt datastructure from xml."""
 
@@ -20,9 +25,7 @@ def parse_nbt(node, params={}):
         name = ''
 
     if node.text and node.text != '':
-        text = node.text
-        for key, value in params.iteritems():
-            text = re.sub('%%\\(%s\\)' % key, str(value), text)
+        text = replace_params(node.text, params)
     else:
         text = ''
 

@@ -52,12 +52,9 @@ SOUTH = 3
 WEST = 4
 EAST = 5
 
-def value_format(fmt, **kwargs):
-    for kw, value in kwargs.iteritems():
-        print '%%(%s)' % kw
-        print 'fmt='+fmt
-        print 'value='+str(value)
-        fmt = re.sub('%%\\(%s\\)' % kw, str(value), fmt)
+def replace_params(fmt, params):
+    for key, value in params.iteritems():
+        fmt = re.sub('%%\\(%s\\)' % key, str(value), fmt)
     return fmt
 
 class Block(object):
@@ -68,8 +65,12 @@ class Block(object):
 
     @staticmethod
     def from_xml(buildfile, node):
-        sign_id = node.attrib['sign']
+        sign_id = int(node.attrib['sign'])
         signs = buildfile.signs.get_signs(sign_id)
+
+        if not signs or len(signs) <= 0:
+            log.error('block reference not found, sign: ' + str(sign_id))
+            return None
 
         # block by ID:
         if 'blockId' in node.attrib:
@@ -85,46 +86,53 @@ class Block(object):
             log.error('unable to find block for element '+str(node))
             return None
 
-        """
-        # block data value
-        data = None
-        if 'data' in node.attrib:
-            if re.match('^\d+$', node.attrib['data']):
-                data = node.attrib['data']
-            else:
-                data = value_format(node.attrib['data'], facing=sign.facing, data=sign.data)
-
-        compound = node.find('Compound')
-        """
-
         return Block(signs, block, node)
+
+    def get_data(self, params):
+        if 'data' in self.node.attrib:
+            return int(replace_params(self.node.attrib['data'], params))
+
+    def get_nbt(self, params):
+        compound = self.node.find('Compound')
+        if compound is not None:
+            log.info('loading nbt data for tileentity replacement')
+            return parse_nbt(compound, params)
 
     def replace(self, level):
         log.info('apply block replacement: ' + str(self))
         for sign in self.signs:
-            log.info('replace sign with spec block,')
+            log.info('replace sign with specified block')
             log.info('sign: ' + str(sign))
 
+            x, y, z = (sign.x, sign.y, sign.z)
+            params = {
+                'x': x,
+                'y': y,
+                'z': z,
+                'data': sign.data,
+                'facing': sign.facing,
+            }
+            
+            data = self.get_data(params)
+            if not data: data = 0
+            nbt = self.get_nbt(params)
 
+            log.info('data value replace is: ' + str(data))
+            log.info('nbt tile replace is: ' + str(nbt))
 
-        """
-        # try to just copy the data value: TODO: foo
-        self.block.blockData = self.data
+            # try to just copy the data value: TODO: foo
+            self.block.blockData = data
 
-        log.info('replace block:')
-        log.info(str(self))
+            bb = BoundingBox((x, y, z), (1, 1, 1))
 
-        bb = BoundingBox((self.sign.x, self.sign.y, self.sign.z),
-                (1, 1, 1))
+            # remove the tile entity of the existing sign:
+            level.removeTileEntitiesInBox(bb)
 
-        # remove the tile entity of the sign:
-        level.removeTileEntitiesInBox(bb)
+            level.fillBlocks(bb, self.block)
 
-        level.fillBlocks(bb, self.block)
+            if nbt:
+                level.addTileEntity(nbt)
 
-        if self.nbt:
-            level.addTileEntity(self.nbt)
-        """
 
     def __str__(self):
         return "Block(%d signs, %s)" % (len(self.signs), str(self.block))
@@ -137,6 +145,9 @@ class SignList(object):
         if not sign.id in self.signs:
             self.signs[sign.id] = []
         self.signs[sign.id].append(sign)
+
+    def get_signs(self, id):
+        return self.signs[id]
 
     def get_caption(self, id):
         caption = None
@@ -226,9 +237,6 @@ class Buildfile(object):
         self.blocks = []
         self.root = None
 
-        self._load_xml()
-        
-
     def load_signs(self):
         for i, cPos in enumerate(self.level.allChunks):
             try:
@@ -254,11 +262,10 @@ class Buildfile(object):
             if i % 100 == 0:
                 log.info('reading tiles from chunk %d' % i)
 
-    def _load_xml(self):
+    def load_xml(self):
         """Loads the xml buildfile."""
         try:
             self.root = XMLReader(self.path).root
-
 
             #for sign in self.root.findall('./signs/sign'):
             #    self.load_sign_xml(sign)
@@ -267,8 +274,8 @@ class Buildfile(object):
                 self.load_block_xml(block)
 
             # load replacments etc...
-        except:
-            pass
+        except Exception, e:
+            log.exception('error loading buildfile')
 
     def load_block_xml(self, node):
         """Used to replace signs with blocks/tiles of any type."""
@@ -300,6 +307,7 @@ class Buildfile(object):
     def block_replace(self):
         #if self.post_title:
         #    self.level.displayName += ' ' + self.post_title
+        log.info('block replace')
 
         for block in self.blocks:
             block.replace(self.level)
@@ -335,6 +343,7 @@ if __name__ == '__main__':
     build.force_sign = args['--force']
 
     build.load_signs()
+    build.load_xml()
  
     # init loads the signs and writes the xml file, adding found signs to it
     if args['init']:
