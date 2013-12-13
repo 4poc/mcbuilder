@@ -10,6 +10,7 @@ from xmlcomb import XMLCombiner
 import sys
 import os
 import logging
+import re
 
 log = logging.getLogger(__name__)
 formatter = logging.Formatter('[%(filename)s:%(lineno)s] %(levelname)s - %(message)s')
@@ -26,7 +27,11 @@ class XMLWriter(object):
         """Returns the root as prettified xml."""
         # needs to reparse using minidom, because etree doesnt support this
         reparsed = minidom.parseString(ET.tostring(self.root, 'utf-8'))
-        return reparsed.toprettyxml(indent='  ')
+        xml = reparsed.toprettyxml(indent='    ')
+        # cleanup:
+        xml = re.sub(r'[ ]+\n', '', xml)
+        xml = re.sub(r'\n\n+', '\n', xml)
+        return xml
 
 class XMLReader(object):
     def __init__(self, filename):

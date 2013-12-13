@@ -61,16 +61,15 @@ def value_format(fmt, **kwargs):
     return fmt
 
 class Block(object):
-    def __init__(self, sign, block, **kwargs):
-        self.sign = sign
+    def __init__(self, signs, block, node):
+        self.signs = signs
         self.block = block
-        self.data = kwargs.get('data', sign.data)
-        self.nbt = kwargs.get('nbt')
+        self.node = node
 
     @staticmethod
     def from_xml(buildfile, node):
         sign_id = node.attrib['sign']
-        sign = buildfile.get_sign(sign_id)
+        signs = buildfile.signs.get_signs(sign_id)
 
         # block by ID:
         if 'blockId' in node.attrib:
@@ -86,6 +85,7 @@ class Block(object):
             log.error('unable to find block for element '+str(node))
             return None
 
+        """
         # block data value
         data = None
         if 'data' in node.attrib:
@@ -94,19 +94,20 @@ class Block(object):
             else:
                 data = value_format(node.attrib['data'], facing=sign.facing, data=sign.data)
 
-        nbt = None
-        for child in node:
-            if child.tag == 'Compound':
-                params = {
-                        'x': sign.x,
-                        'y': sign.y,
-                        'z': sign.z
-                        }
-                nbt = parse_nbt(child, params)
+        compound = node.find('Compound')
+        """
 
-        return Block(sign, block, data=data, nbt=nbt)
+        return Block(signs, block, node)
 
     def replace(self, level):
+        log.info('apply block replacement: ' + str(self))
+        for sign in self.signs:
+            log.info('replace sign with spec block,')
+            log.info('sign: ' + str(sign))
+
+
+
+        """
         # try to just copy the data value: TODO: foo
         self.block.blockData = self.data
 
@@ -123,18 +124,46 @@ class Block(object):
 
         if self.nbt:
             level.addTileEntity(self.nbt)
+        """
 
     def __str__(self):
-        return "Block(%s, %s)" % (str(self.sign), str(self.block))
+        return "Block(%d signs, %s)" % (len(self.signs), str(self.block))
+
+class SignList(object):
+    def __init__(self):
+        self.signs = {}
+
+    def add_sign(self, sign):
+        if not sign.id in self.signs:
+            self.signs[sign.id] = []
+        self.signs[sign.id].append(sign)
+
+    def get_caption(self, id):
+        caption = None
+        for sign in self.signs[id]:
+            if sign.caption and sign.caption != '':
+                caption = sign.caption
+                break
+        return caption
+
+    def create_xml(self):
+        group = ET.Element("signs")
+        for id, signs in self.signs.iteritems():
+            caption = self.get_caption(id)
+            node = ET.SubElement(group, "sign")
+            node.set('id', str(id))
+            if caption:
+                node.text = caption
+        return group
 
 class Sign(object):
-    def __init__(self, x, y, z, data, id, name, facing):
+    def __init__(self, x, y, z, data, id, caption, facing):
         self.x = x
         self.y = y
         self.z = z
         self.data = data
         self.id = id
-        self.name = name
+        self.caption = caption
         self.facing = facing
 
     @staticmethod
@@ -152,7 +181,7 @@ class Sign(object):
 
         if desc:
             facing = Sign.get_facing(id, data)
-            return Sign(x, y, z, data, desc['id'], desc['name'], facing)
+            return Sign(x, y, z, data, int(desc['id']), desc['name'], facing)
         else:
             log.warn('ignore sign with content: ' + content)
 
@@ -172,28 +201,6 @@ class Sign(object):
                 return EAST
 
     @staticmethod
-    def from_xml(node):
-        x = int(node.attrib['x'])
-        y = int(node.attrib['y'])
-        z = int(node.attrib['z'])
-        data = node.attrib['data']
-        id = node.attrib['id']
-        name = node.attrib['name']
-        facing = node.attrib['facing']
-        return Sign(x, y, z, data, id, name, facing)
-
-    def create_xml(self, parent):
-        node = ET.SubElement(parent, "sign")
-        node.set("id", self.id)
-        node.set("name", self.name)
-        node.set("x", str(self.x))
-        node.set("y", str(self.y))
-        node.set("z", str(self.z))
-        node.set("data", str(self.data))
-        node.set("facing", str(self.facing))
-        return node
-
-    @staticmethod
     def parse_content(content):
         """Parses signs formatted like '1# description'"""
         matches = re.match('^(\d+)# ?(.*)$', content)
@@ -204,7 +211,7 @@ class Sign(object):
             }
 
     def __str__(self):
-        return "Sign x%d y%d z%d data=%d facing=%d" % (self.x, self.y, self.z, self.data, self.facing)
+        return "Sign x%d y%d z%d id=%d data=%d facing=%d" % (self.x, self.y, self.z, self.id, self.data, self.facing)
 
 class Buildfile(object):
     def __init__(self, path, world_path):
@@ -215,8 +222,11 @@ class Buildfile(object):
         self.post_title = None
         self.force_sign = False # replace non-existing signs just by xml definition
 
-        self.signs = []
+        self.signs = SignList()
         self.blocks = []
+        self.root = None
+
+        self._load_xml()
         
 
     def load_signs(self):
@@ -239,64 +249,52 @@ class Buildfile(object):
                     
                     sign = Sign.from_tile(tile, blockId, blockData)
                     if sign: # this returns None if the sign is not in the correct format
-                        self.signs.append(sign)
+                        self.signs.add_sign(sign)
 
             if i % 100 == 0:
                 log.info('reading tiles from chunk %d' % i)
 
-    def load_xml(self):
+    def _load_xml(self):
         """Loads the xml buildfile."""
-        root = XMLReader(self.path).root
+        try:
+            self.root = XMLReader(self.path).root
 
-        for sign in root.findall('./signs/sign'):
-            self.load_sign_xml(sign)
 
-        for block in root.findall('./blocks/block'):
-            self.load_block_xml(block)
+            #for sign in self.root.findall('./signs/sign'):
+            #    self.load_sign_xml(sign)
 
-        # load replacments etc...
+            for block in self.root.findall('./blocks/block'):
+                self.load_block_xml(block)
 
-    def load_sign_xml(self, node):
-        sign = Sign.from_xml(node)
-        if sign:
-            if not self.find_sign(sign):
-                log.warn('xml world mismatch, cancel, set force to override')
-                log.warn('no sign in world, can replace non-existing sign if -f is set')
-                if not self.force_sign:
-                    sys.exit()
-
-                self.signs.append(sign)
+            # load replacments etc...
+        except:
+            pass
 
     def load_block_xml(self, node):
         """Used to replace signs with blocks/tiles of any type."""
         self.blocks.append(Block.from_xml(self, node))
-
-    def find_sign(self, sign):
-        for x in self.signs:
-            if x.x == sign.x and x.y == sign.y and x.z == sign.z:
-                return x
-
-    def get_sign(self, id):
-        for sign in self.signs:
-            if sign.id == id:
-                return sign
 
     def existing_xml(self):
         return os.path.isfile(self.path)
 
     def create_xml(self):
         """Creates a xml file with all the data from the signs and exising xml."""
-        root = ET.Element("mcbuilder")
-        signs = ET.SubElement(root, "signs")
-        for sign in self.signs:
-            sign.create_xml(signs)
+        if self.root is not None:
+            root = self.root
+            signs = root.find('signs')
+            if signs is not None: root.remove(signs)
+        else:
+            root = ET.Element("mcbuilder")
+
+        signs = self.signs.create_xml()
+        root.insert(0, signs)
 
         return XMLWriter(root).to_string()
 
     def write_xml(self):
         with open(self.path, 'w') as f:
             xml = self.create_xml()
-            if xml:
+            if xml and xml != '':
                 f.write(xml)
 
     def block_replace(self):
@@ -337,18 +335,11 @@ if __name__ == '__main__':
     build.force_sign = args['--force']
 
     build.load_signs()
-
-    if build.existing_xml():
-        build.load_xml()
  
-    # just saves a buildfile with all sign data found in the world
-    # the world is not modified, and the buildfile should not already exist
+    # init loads the signs and writes the xml file, adding found signs to it
     if args['init']:
-        if len(build.blocks) <= 0:
-            log.info('write buildfile: %s' % build.path)
-            build.write_xml()
-        else:
-            log.warn('unable to init non-empty buildfile')
+        log.info('init signs in buildfile: %s' % build.path)
+        build.write_xml()
 
     # replace all signs in the world with the specified replacements
     elif args['build']:
